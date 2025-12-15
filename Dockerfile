@@ -8,7 +8,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install --production
+# Install dependencies (npm ci is faster for CI)
+RUN npm ci --only=production
 
 # Copy complete project
 COPY . .
