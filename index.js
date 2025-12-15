@@ -15,7 +15,7 @@ const electricianRoute = require('./routes/Electrician.routes/electrician.route.
 
 dotenv.config();
 
-const PORT = process.env.PORT || 8081;
+const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
@@ -26,9 +26,8 @@ app.use(bodyparser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 
-// ✅ MongoDB connection (DIRECT – env removed)
 mongoose.connect(
-  "mongodb+srv://krishnachaudhari0340_boxselling:ZUjCPWQcMVtI41TZ@cluster1.evfh7yz.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster1"
+  process.env.MONGO_URL
 )
   .then(() => {
     console.log("🗄️ MongoDB connected successfully");

@@ -32,7 +32,7 @@ spec:
           image: 127.0.0.1:30085/techfixer/techfixer:latest
 
           ports:
-            - containerPort: 8081
+            - containerPort: 5000
 
           env:
             - name: DB_USER
@@ -74,14 +74,14 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: 8081
+              port: 5000
             initialDelaySeconds: 10
             periodSeconds: 10
 
           livenessProbe:
             httpGet:
               path: /health
-              port: 8081
+              port: 5000
             initialDelaySeconds: 30
             periodSeconds: 30
 

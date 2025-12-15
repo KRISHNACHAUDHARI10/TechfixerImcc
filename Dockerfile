@@ -13,8 +13,8 @@ RUN npm install --production
 # Copy complete project
 COPY . .
 
-# App runs on 8081
-EXPOSE 8081
+# App runs on 5000
+EXPOSE 5000
 
 # Start server
-CMD ["node", "index.js"]
+CMD ["npm", "start"]
