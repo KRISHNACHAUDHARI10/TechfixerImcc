@@ -106,21 +106,13 @@ spec:
                 }
             }
         }
-
+        
         stage('Login to Docker Registry') {
             steps {
                 container('dind') {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'nexus-credentials',
-                            usernameVariable: 'REG_USER',
-                            passwordVariable: 'REG_PASS'
-                        )
-                    ]) {
-                        sh '''
-                            docker login $REGISTRY_URL -u $REG_USER -p $REG_PASS
-                        '''
-                    }
+                    sh '''
+                        docker login $REGISTRY_URL -u admin -p Changeme@2025
+                    '''
                 }
             }
         }
