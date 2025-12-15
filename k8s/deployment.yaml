@@ -1,0 +1,103 @@
+# -------------------------------
+# Namespace (Auto-create)
+# -------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "2401029"
+---
+# -------------------------------
+# Deployment
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: techfixer-deployment
+  namespace: "2401029"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: techfixer
+  template:
+    metadata:
+      labels:
+        app: techfixer
+    spec:
+      imagePullSecrets:
+        - name: nexus-secret   # ⚠️ DO NOT CHANGE
+
+      containers:
+        - name: techfixer
+          image: 127.0.0.1:30085/techfixer/techfixer:latest
+
+          ports:
+            - containerPort: 8081
+
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_USER
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASSWORD
+
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_NAME
+
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_HOST
+
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_PORT
+
+            - name: NODE_ENV
+              value: "production"
+
+            - name: DEBUG
+              value: "0"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app/data
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+      volumes:
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: techfixer-pvc

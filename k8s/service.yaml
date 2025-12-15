@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: techfixer-service
+  namespace: "2401029"
+spec:
+  selector:
+    app: techfixer
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+  type: ClusterIP

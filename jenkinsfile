@@ -1,0 +1,133 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: node
+    image: node:18
+    command: ["cat"]
+    tty: true
+
+  - name: dind
+    image: docker:24-dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    command: ["dockerd-entrypoint.sh"]
+    args: ["--host=tcp://127.0.0.1:2375"]
+
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["cat"]
+    tty: true
+    env:
+    - name: KUBECONFIG
+      value: /kube/config
+    volumeMounts:
+    - name: kubeconfig
+      mountPath: /kube/config
+      subPath: config
+
+  volumes:
+  - name: kubeconfig
+    secret:
+      secretName: kubeconfig-secret
+'''
+        }
+    }
+
+    environment {
+        APP_NAME       = "techfixer"
+        IMAGE_TAG      = "latest"
+        REGISTRY_URL   = "docker.io"
+        REGISTRY_REPO  = "your-dockerhub-username"
+        K8S_NAMESPACE  = "default"
+    }
+
+    stages {
+
+        stage('Install Dependencies') {
+            steps {
+                container('node') {
+                    sh '''
+                        node -v
+                        npm -v
+                        npm install
+                    '''
+                }
+            }
+        }
+
+        stage('Run Tests (Optional)') {
+            steps {
+                container('node') {
+                    sh '''
+                        if [ -f package.json ] && grep -q "\"test\"" package.json; then
+                          npm test
+                        else
+                          echo "No tests found, skipping..."
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker build -t $APP_NAME:$IMAGE_TAG .
+                        docker images
+                    '''
+                }
+            }
+        }
+
+        stage('Login to Docker Registry') {
+            steps {
+                container('dind') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'DOCKERHUB_CREDENTIALS',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            docker login -u $DOCKER_USER -p $DOCKER_PASS
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Tag & Push Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker tag $APP_NAME:$IMAGE_TAG \
+                          $REGISTRY_URL/$REGISTRY_REPO/$APP_NAME:$IMAGE_TAG
+
+                        docker push $REGISTRY_URL/$REGISTRY_REPO/$APP_NAME:$IMAGE_TAG
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                        kubectl apply -f k8s/deployment.yaml
+                        kubectl rollout status deployment/$APP_NAME -n $K8S_NAMESPACE
+                    '''
+                }
+            }
+        }
+    }
+}
