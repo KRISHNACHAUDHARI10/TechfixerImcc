@@ -1,17 +1,17 @@
-const mongoose  =require('mongoose');
-const bcrypt = require('bcrypt')
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs')
 const schema = new mongoose.Schema({
-    username:{
-        type:String,
-        unique:true,
-        required:true,
-        
+    username: {
+        type: String,
+        unique: true,
+        required: true,
+
     },
-    password:{
-        type:String,
-        required:true
+    password: {
+        type: String,
+        required: true
     }
-} 
+}
 
 )
 
@@ -28,5 +28,5 @@ const schema = new mongoose.Schema({
 // } 
 
 
-const Admin = mongoose.model("Admin" , schema);
+const Admin = mongoose.model("Admin", schema);
 module.exports = Admin;

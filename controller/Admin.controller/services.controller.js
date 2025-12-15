@@ -5,7 +5,7 @@ const Service = require("../../model/services.model.js");
 const Electrician = require("../../model/electrician.model.js");
 const Order = require("../../model/order.model.js");
 const Admin = require("../../model/admin.js");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 // Import the fixed upload functions - make sure path is correct
 const {
@@ -291,14 +291,14 @@ exports.addcategorylogic = async (req, res) => {
         "Request file:",
         req.file
           ? {
-              fieldname: req.file.fieldname,
-              originalname: req.file.originalname,
-              mimetype: req.file.mimetype,
-              filename: req.file.filename,
-              path: req.file.path,
-              size: req.file.size,
-              public_id: req.file.public_id,
-            }
+            fieldname: req.file.fieldname,
+            originalname: req.file.originalname,
+            mimetype: req.file.mimetype,
+            filename: req.file.filename,
+            path: req.file.path,
+            size: req.file.size,
+            public_id: req.file.public_id,
+          }
           : "No file found"
       );
 
