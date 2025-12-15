@@ -26,9 +26,9 @@ app.use(bodyparser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 
-mongoose.connect(
-  process.env.MONGO_URL
-)
+const dbUrl = process.env.MONGO_URL || `mongodb://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}?authSource=admin`;
+
+mongoose.connect(dbUrl)
   .then(() => {
     console.log("🗄️ MongoDB connected successfully");
   })
@@ -62,6 +62,9 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 app.get("/", (req, res) => {
   res.redirect("/user/");
 });
