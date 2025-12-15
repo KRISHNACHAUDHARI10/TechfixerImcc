@@ -140,7 +140,14 @@ spec:
                             kubectl apply -f deployment.yaml
                             kubectl apply -f service.yaml
                             kubectl apply -f ingress.yaml
-                            kubectl rollout status deployment/techfixer-deployment -n 2401029
+                            
+                            if ! kubectl rollout status deployment/techfixer-deployment -n 2401029; then
+                                echo "⚠️ Deployment Failed! Fetching Debug Info..."
+                                kubectl get pods -n 2401029
+                                kubectl describe pods -l app=techfixer -n 2401029
+                                kubectl logs -l app=techfixer -n 2401029 --tail=50
+                                exit 1
+                            fi
                         '''
                     }
                 }
