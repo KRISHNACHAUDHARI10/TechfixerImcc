@@ -29,7 +29,7 @@ spec:
 
       containers:
         - name: techfixer
-          image: 127.0.0.1:30085/techfixer/techfixer:latest
+          image: nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/2401029/techfixer-app:latest
 
           ports:
             - containerPort: 5000
