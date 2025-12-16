@@ -149,6 +149,9 @@ spec:
                                 --dry-run=client -o yaml | kubectl apply -f -
 
                             # 3. Apply Resources
+                            # Force replace PVC to allow storage class change
+                            kubectl delete pvc techfixer-pvc -n 2401029 --ignore-not-found
+                            
                             kubectl apply -f pvc.yaml
                             kubectl apply -f deployment.yaml
                             kubectl apply -f service.yaml
