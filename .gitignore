@@ -7,6 +7,9 @@ yarn-error.log*
 # Environment variables
 .env
 
+# Kubernetes secrets (apply manually, don't commit)
+secrets.yaml
+
 # OS-specific
 .DS_Store
 Thumbs.db

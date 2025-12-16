@@ -17,7 +17,7 @@ spec:
         app: techfixer
     spec:
       imagePullSecrets:
-        - name: nexus-secret   # ⚠️ DO NOT CHANGE
+        - name: nexus-secret
 
       containers:
         - name: techfixer
@@ -27,41 +27,53 @@ spec:
             - containerPort: 5000
 
           env:
-            - name: DB_USER
+            - name: PORT
+              value: "5000"
+
+            - name: MONGO_URL
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
-                  key: DB_USER
+                  name: app-secret
+                  key: MONGO_URL
 
-            - name: DB_PASSWORD
+            - name: SESSION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
-                  key: DB_PASSWORD
+                  name: app-secret
+                  key: SESSION_SECRET
 
-            - name: DB_NAME
+            - name: CLOUDINARY_CLOUD_NAME
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
-                  key: DB_NAME
+                  name: app-secret
+                  key: CLOUDINARY_CLOUD_NAME
 
-            - name: DB_HOST
+            - name: CLOUDINARY_API_KEY
               valueFrom:
-                configMapKeyRef:
-                  name: db-config
-                  key: DB_HOST
+                secretKeyRef:
+                  name: app-secret
+                  key: CLOUDINARY_API_KEY
 
-            - name: DB_PORT
+            - name: CLOUDINARY_API_SECRET
               valueFrom:
-                configMapKeyRef:
-                  name: db-config
-                  key: DB_PORT
+                secretKeyRef:
+                  name: app-secret
+                  key: CLOUDINARY_API_SECRET
+
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: STRIPE_SECRET_KEY
+
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: STRIPE_PUBLISHABLE_KEY
 
             - name: NODE_ENV
               value: "production"
-
-            - name: DEBUG
-              value: "0"
 
           readinessProbe:
             httpGet:
