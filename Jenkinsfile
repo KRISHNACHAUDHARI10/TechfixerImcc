@@ -135,43 +135,62 @@ spec:
         stage('Deploy Application') {
             steps {
                 container('kubectl') {
-                    dir('k8s') {
-                        sh '''
-                            # 1. Apply Namespace first
-                            kubectl apply -f namespace.yaml
-                            
-                            # 2. Create Image Pull Secret in the new namespace
-                            kubectl create secret docker-registry nexus-secret \
-                                --docker-server=$REGISTRY_URL \
-                                --docker-username=admin \
-                                --docker-password=Changeme@2025 \
-                                --namespace=2401029 \
-                                --dry-run=client -o yaml | kubectl apply -f -
+                    withCredentials([
+                        string(credentialsId: 'MONGODB_URL', variable: 'MONGO_URL'),
+                        string(credentialsId: 'ession-secret', variable: 'SESSION_SECRET'),
+                        string(credentialsId: 'cloudinary-cloud-name', variable: 'CLOUDINARY_CLOUD_NAME'),
+                        string(credentialsId: 'cloudinary-api-key', variable: 'CLOUDINARY_API_KEY'),
+                        string(credentialsId: 'cloudinary-api-secret', variable: 'CLOUDINARY_API_SECRET'),
+                        string(credentialsId: 'stripe-secret-key', variable: 'STRIPE_SECRET_KEY'),
+                        string(credentialsId: 'stripe-publishable-key', variable: 'STRIPE_PUBLISHABLE_KEY')
+                    ]) {
+                        dir('k8s') {
+                            sh '''
+                                # 1. Apply Namespace first
+                                kubectl apply -f namespace.yaml
+                                
+                                # 2. Create Image Pull Secret in the new namespace
+                                kubectl create secret docker-registry nexus-secret \
+                                    --docker-server=$REGISTRY_URL \
+                                    --docker-username=admin \
+                                    --docker-password=Changeme@2025 \
+                                    --namespace=2401029 \
+                                    --dry-run=client -o yaml | kubectl apply -f -
 
-                            # 3. Apply App Secrets (from root directory)
-                            kubectl apply -f ../secrets.yaml
+                                # 3. Create App Secrets directly
+                                kubectl create secret generic app-secret \
+                                    --from-literal=MONGO_URL="$MONGO_URL" \
+                                    --from-literal=SESSION_SECRET="$SESSION_SECRET" \
+                                    --from-literal=CLOUDINARY_CLOUD_NAME="$CLOUDINARY_CLOUD_NAME" \
+                                    --from-literal=CLOUDINARY_API_KEY="$CLOUDINARY_API_KEY" \
+                                    --from-literal=CLOUDINARY_API_SECRET="$CLOUDINARY_API_SECRET" \
+                                    --from-literal=STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
+                                    --from-literal=STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY" \
+                                    --namespace=2401029 \
+                                    --dry-run=client -o yaml | kubectl apply -f -
 
-                            # 4. Apply Resources
-                            # Cleanup old resources to ensure clean recreation (Avoids PVC stuck in Terminating)
-                            kubectl delete deployment techfixer-deployment -n 2401029 --ignore-not-found
-                            kubectl delete pvc techfixer-pvc -n 2401029 --ignore-not-found
-                            
-                            kubectl apply -f pvc.yaml
-                            kubectl apply -f deployment.yaml
-                            kubectl apply -f service.yaml
-                            kubectl apply -f ingress.yaml
-                            
-                            # 5. Wait for Rollout
-                            if ! kubectl rollout status deployment/techfixer-deployment -n 2401029; then
-                                echo "⚠️ Deployment Failed! Fetching Debug Info..."
-                                kubectl get events -n 2401029 --sort-by='.lastTimestamp'
-                                kubectl get pvc -n 2401029
-                                kubectl get pods -n 2401029
-                                kubectl describe pods -l app=techfixer -n 2401029
-                                kubectl logs -l app=techfixer -n 2401029 --tail=50
-                                exit 1
-                            fi
-                        '''
+                                # 4. Apply Resources
+                                # Cleanup old resources to ensure clean recreation (Avoids PVC stuck in Terminating)
+                                kubectl delete deployment techfixer-deployment -n 2401029 --ignore-not-found
+                                kubectl delete pvc techfixer-pvc -n 2401029 --ignore-not-found
+                                
+                                kubectl apply -f pvc.yaml
+                                kubectl apply -f deployment.yaml
+                                kubectl apply -f service.yaml
+                                kubectl apply -f ingress.yaml
+                                
+                                # 5. Wait for Rollout
+                                if ! kubectl rollout status deployment/techfixer-deployment -n 2401029; then
+                                    echo "⚠️ Deployment Failed! Fetching Debug Info..."
+                                    kubectl get events -n 2401029 --sort-by='.lastTimestamp'
+                                    kubectl get pvc -n 2401029
+                                    kubectl get pods -n 2401029
+                                    kubectl describe pods -l app=techfixer -n 2401029
+                                    kubectl logs -l app=techfixer -n 2401029 --tail=50
+                                    exit 1
+                                fi
+                            '''
+                        }
                     }
                 }
             }
