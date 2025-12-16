@@ -137,13 +137,28 @@ spec:
                 container('kubectl') {
                     dir('k8s') {
                         sh '''
+                            # 1. Apply Namespace first
+                            kubectl apply -f namespace.yaml
+                            
+                            # 2. Create Image Pull Secret in the new namespace
+                            kubectl create secret docker-registry nexus-secret \
+                                --docker-server=$REGISTRY_URL \
+                                --docker-username=admin \
+                                --docker-password=Changeme@2025 \
+                                --namespace=2401029 \
+                                --dry-run=client -o yaml | kubectl apply -f -
+
+                            # 3. Apply Resources
                             kubectl apply -f pvc.yaml
                             kubectl apply -f deployment.yaml
                             kubectl apply -f service.yaml
                             kubectl apply -f ingress.yaml
                             
+                            # 4. Wait for Rollout
                             if ! kubectl rollout status deployment/techfixer-deployment -n 2401029; then
                                 echo "⚠️ Deployment Failed! Fetching Debug Info..."
+                                kubectl get events -n 2401029 --sort-by='.lastTimestamp'
+                                kubectl get pvc -n 2401029
                                 kubectl get pods -n 2401029
                                 kubectl describe pods -l app=techfixer -n 2401029
                                 kubectl logs -l app=techfixer -n 2401029 --tail=50

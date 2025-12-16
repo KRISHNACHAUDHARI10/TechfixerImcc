@@ -1,12 +1,4 @@
 # -------------------------------
-# Namespace (Auto-create)
-# -------------------------------
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: "2401029"
----
-# -------------------------------
 # Deployment
 # -------------------------------
 apiVersion: apps/v1
