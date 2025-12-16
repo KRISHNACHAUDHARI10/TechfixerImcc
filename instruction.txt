@@ -1,0 +1,484 @@
+Generic CI/CD Pipeline Reference Guide
+This document serves as a standard reference for creating a CI/CD pipeline for any type of project (MERN, Django, Python, Java, etc.) and deploying it to a Kubernetes cluster using Jenkins, Docker, SonarQube, Nexus, and Kubernetes.
+It is designed so that any team member can follow the steps and adapt the files for their own project.
+
+1. Overall CI/CD Flow
+Code → Build → Analyze → Package → Deploy (Automated via Jenkins)
+Unified Access Model
+All deployments and cluster interactions happen only through Jenkins
+Jenkins has the required Kubernetes permissions to deploy any project
+No user requires direct Kubernetes access for normal operations
+Student Responsibility
+Developer pushes code to GitHub
+Jenkins pipeline is triggered
+Application is built and tested
+Code quality is checked 
+Docker image is created
+Image is pushed to registry
+Jenkins applies Kubernetes manifests and deploys the project
+Special Support Role (Exception Only)
+Lens is used only when required for:
+Viewing logs
+Inspecting pod/events
+Debugging cluster-level issues
+⚠️ Important: Kubernetes access is abstracted via Jenkins. Direct cluster access is not part of the normal workflow.
+
+2. Prerequisites
+For Students
+GitHub account
+Basic Docker knowledge
+Jenkins pipeline understanding
+Access to shared Jenkins (provided by college)
+Common Infrastructure (Provided)
+Jenkins server (pre-configured)
+Nexus / private registry
+SonarQube
+Kubernetes cluster (through jenkins only)
+
+3. Standard Project Structure (Mandatory)
+Every student must follow this structure so that Project can be deployed easily:
+project-root/
+│── app/                  # Application source code
+│── Dockerfile             # Mandatory
+│── Jenkinsfile            # Mandatory
+│── k8s/                   # Mandatory
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── pvc.yaml (only if required)
+│   ├── ingress.yaml 
+│── sonar-project.properties (optional)
+│── requirements.txt / package.json
+│── README.md
+
+
+4. Dockerfile
+Refrence Docker files:
+
+
+Dockerfile – Django Application (Backend)
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+EXPOSE 8000
+
+CMD ["gunicorn", "project_name.wsgi:application", "--bind", "0.0.0.0:8000"]
+
+
+
+
+    Dockerfile – MERN Backend (Node.js / Express)
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --production
+COPY . .
+EXPOSE 5000
+CMD ["npm", "start"]
+
+Dockerfile – MERN Frontend (React – Production Build)
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+FROM nginx:alpine
+RUN rm /etc/nginx/conf.d/default.conf
+COPY --from=build /app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+---
+
+5. Jenkinsfile (Generic Pipeline)
+	Refrence Jenkins Pipeline
+
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli
+    command: ["cat"]
+    tty: true
+
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command: ["cat"]
+    tty: true
+    securityContext:
+      runAsUser: 0
+      readOnlyRootFilesystem: false
+    env:
+    - name: KUBECONFIG
+      value: /kube/config
+    volumeMounts:
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
+
+  - name: dind
+    image: docker:dind
+    securityContext:
+      privileged: true
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""
+    volumeMounts:
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
+
+  volumes:
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
+'''
+        }
+    }
+
+    environment {
+        APP_NAME        = "your-app-name"
+        IMAGE_TAG       = "latest"
+        REGISTRY_URL    = "REGISTRY_HOST:PORT"
+        REGISTRY_REPO   = "project-namespace"
+        SONAR_PROJECT   = "sonar-project-key"
+        SONAR_HOST_URL = "http://sonarqube-host:9000"
+    }
+
+    stages {
+
+        stage('Build Docker Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        sleep 15
+                        docker build -t $APP_NAME:$IMAGE_TAG .
+                        docker images
+                    '''
+                }
+            }
+        }
+
+        stage('Run Tests in Docker') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker run --rm $APP_NAME:$IMAGE_TAG \
+                        pytest --maxfail=1 --disable-warnings --cov=. --cov-report=xml
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                container('sonar-scanner') {
+                    withCredentials([
+                        string(credentialsId: 'SONAR_TOKEN_ID', variable: 'SONAR_TOKEN')
+                    ]) {
+                        sh '''
+                            sonar-scanner \
+                              -Dsonar.projectKey=$SONAR_PROJECT \
+                              -Dsonar.host.url=$SONAR_HOST_URL \
+                              -Dsonar.login=$SONAR_TOKEN \
+                              -Dsonar.python.coverage.reportPaths=coverage.xml
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Login to Docker Registry') {
+            steps {
+                container('dind') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'REGISTRY_CREDENTIALS_ID',
+                            usernameVariable: 'REG_USER',
+                            passwordVariable: 'REG_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            docker login $REGISTRY_URL -u $REG_USER -p $REG_PASS
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build - Tag - Push Image') {
+            steps {
+                container('dind') {
+                    sh '''
+                        docker tag $APP_NAME:$IMAGE_TAG \
+                          $REGISTRY_URL/$REGISTRY_REPO/$APP_NAME:$IMAGE_TAG
+
+                        docker push $REGISTRY_URL/$REGISTRY_REPO/$APP_NAME:$IMAGE_TAG
+                        docker pull $REGISTRY_URL/$REGISTRY_REPO/$APP_NAME:$IMAGE_TAG
+                        docker images
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                container('kubectl') {
+                    dir('k8s-deployment') {
+                        sh '''
+                            kubectl apply -f deployment.yaml
+                            kubectl rollout status deployment/$APP_NAME -n <NAMESPACE>
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+6. Kubernetes Deployment Template
+Refrence deployment.yaml
+
+# -------------------------------
+# Namespace (Auto-create if missing)
+# -------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "<NAMESPACE>"
+
+— #(---three dashes) 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <APP_NAME>-deployment
+  namespace: "<NAMESPACE>"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: <APP_NAME>
+  template:
+    metadata:
+      labels:
+        app: <APP_NAME>
+    spec:
+      imagePullSecrets:
+        - name: nexus-secret   # ⚠️ DO NOT CHANGE 
+
+      containers:
+        - name: <APP_NAME>
+          image: 127.0.0.1:30085/<PROJECT_NAMESPACE>/<APP_NAME>:<TAG>
+
+          ports:
+            - containerPort: <APP_PORT>
+
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DB_NAME
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: db-config
+                  key: DB_PORT
+            - name: DEBUG
+              value: "0"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: <APP_PORT>
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: <APP_PORT>
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          volumeMounts:
+            - name: app-storage
+              mountPath: /app/data
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+
+      volumes:
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: app-pvc
+
+
+7. Kubernetes Service Template
+Refrence service.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: <APP_NAME>-service
+  namespace: "<NAMESPACE>"
+spec:
+  selector:
+    app: <APP_NAME>
+  ports:
+    - protocol: TCP
+      port: <APP_PORT>
+      targetPort: <APP_PORT>
+  type: ClusterIP
+
+
+---
+
+8. PersistentVolumeClaim (Optional – if app needs storage)
+Refrence PVC.yaml
+
+# -------------------------------
+# PersistentVolumeClaim
+# -------------------------------
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-pvc
+  namespace: "<NAMESPACE>"
+spec:
+  storageClassName: local-path
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+9. Ingress Template
+Refrence ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: <APP_NAME>-ingress
+  namespace: "<NAMESPACE>"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: <APP_DOMAIN>.imcc.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: <APP_NAME>-service
+                port:
+                  number: <APP_PORT>
+
+
+
+10. Common Errors & Fixes
+ImagePullBackOff
+Image tag mismatch
+Wrong registry URL
+Missing imagePullSecrets
+CrashLoopBackOff
+Application not starting
+Wrong CMD or PORT
+Missing environment variables
+Jenkins Pod Not Starting
+YAML indentation issues
+Privileged mode missing
+
+11. Access & Responsibility Model
+What Students MUST Do
+Create GitHub repository
+Add Dockerfile, Jenkinsfile, and k8s folder
+Ensure Jenkins pipeline:
+Builds successfully
+Pushes Docker image to registry
+Deploys automatically via Jenkins
+What Students MUST NOT Do
+Do not manually deploy to Kubernetes
+Do not rely on Lens for deployment
+Special Case: Operational Debugging
+Lens access is used only if required
+Used strictly for investigation and logging
+No configuration changes are performed outside Jenkins
+
+12. Best Practices
+Always use versioned image tags
+Keep manifests in k8s/ folder
+Test Docker image locally before pipeline
+Use roll_nos for namespaces for each project
+
+13. Summary
+This document defines a clear separation of responsibilities:
+By enforcing a standard structure and pipeline, projects from any stack (MERN, Django, Python, Java) can be deployed consistently on the college server.
+This ensures:
+Security
+Consistency
+Faster deployments
+Easier troubleshooting
+
+14. Submission Checklist (For Students)
+Before submission, ensure:
+✅ Jenkins pipeline is GREEN
+✅ Image pushed to registry
+✅ Deployment stage executed successfully
+✅ Application pod is running
+✅ Dockerfile works locally
+✅ Jenkinsfile uses correct registry & credentials
+✅ k8s YAMLs are present in repo
+✅ README explains app, port, and health check
+
+15. Operational Rule
+Jenkins is the single source of truth for Kubernetes access
+All users interact with Kubernetes indirectly via Jenkins
+Lens is a read/debug-only tool for exceptional situations
+Any permanent fix must be applied through GitHub + Jenkins
