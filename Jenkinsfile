@@ -136,13 +136,7 @@ spec:
             steps {
                 container('kubectl') {
                     withCredentials([
-                        string(credentialsId: 'MONGODB_URL', variable: 'MONGO_URL'),
-                        string(credentialsId: 'ession-secret', variable: 'SESSION_SECRET'),
-                        string(credentialsId: 'cloudinary-cloud-name', variable: 'CLOUDINARY_CLOUD_NAME'),
-                        string(credentialsId: 'cloudinary-api-key', variable: 'CLOUDINARY_API_KEY'),
-                        string(credentialsId: 'cloudinary-api-secret', variable: 'CLOUDINARY_API_SECRET'),
-                        string(credentialsId: 'stripe-secret-key', variable: 'STRIPE_SECRET_KEY'),
-                        string(credentialsId: 'stripe-publishable-key', variable: 'STRIPE_PUBLISHABLE_KEY')
+                        file(credentialsId: 'techfil', variable: 'ENV_SECRET_FILE')
                     ]) {
                         dir('k8s') {
                             sh '''
@@ -157,15 +151,9 @@ spec:
                                     --namespace=2401029 \
                                     --dry-run=client -o yaml | kubectl apply -f -
 
-                                # 3. Create App Secrets directly
+                                # 3. Create App Secrets from the secret file
                                 kubectl create secret generic app-secret \
-                                    --from-literal=MONGO_URL="$MONGO_URL" \
-                                    --from-literal=SESSION_SECRET="$SESSION_SECRET" \
-                                    --from-literal=CLOUDINARY_CLOUD_NAME="$CLOUDINARY_CLOUD_NAME" \
-                                    --from-literal=CLOUDINARY_API_KEY="$CLOUDINARY_API_KEY" \
-                                    --from-literal=CLOUDINARY_API_SECRET="$CLOUDINARY_API_SECRET" \
-                                    --from-literal=STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
-                                    --from-literal=STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY" \
+                                    --from-env-file=$ENV_SECRET_FILE \
                                     --namespace=2401029 \
                                     --dry-run=client -o yaml | kubectl apply -f -
 
